@@ -112,14 +112,24 @@ let init = {dict = [("PRINT", Builtin (fun st -> let st = (run st) in
 						 | _ -> raise (Failure "in SET place must be a word"))) ;
 		      ("REPEAT", Builtin (fun st -> (let st = (run st) in
                                                      match st.value with
-                                                       | Num n -> (match st.next () with
-                                                           | Lst body -> let rec fn = (function
-							       | 0 -> (fun (x : state) -> x)
-							       | x -> (fun st -> fn (x - 1)
-								 (run_list body st))) in
-									 (fn n st)
-                                                           | _ -> raise (Failure "REPEAT body must be a word list"))
-                                                       | _ -> raise (Failure "REPEAT bound must be a number"))))
+                                                     | Num n -> (match st.next () with
+								 | Lst body -> let rec fn = (function
+											      | 0 -> (fun (x : state) -> x)
+											      | x -> (fun st -> fn (x - 1)
+														   (run_list body st))) in
+									       (fn n st)
+								 | _ -> raise (Failure "REPEAT body must be a word list"))
+                                                     | _ -> raise (Failure "REPEAT bound must be a number")))) ;
+		      ("TO", Builtin (fun st -> (match (st.next ()) with
+						 | Word w -> (match (st.next ()) with
+							      | Lst p_toks -> let ps = List.map (function | Word w -> w
+												 | _ -> raise (Failure "Parameter name must be a word")) p_toks in
+									      let rec read_body acc = (match (st.next ()) with
+												   | Word "END" -> List.rev acc
+												   | x -> read_body (x::acc)) in
+									      {st with dict = (w, WordList (ps, read_body []))::st.dict}
+							      | _ -> raise (Failure "Parameter list must be a list"))
+						 | _      -> raise (Failure "Proc name must be a word"))))
 
 		   ] ;
 	    env = [] ;
