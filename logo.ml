@@ -109,7 +109,17 @@ let init = {dict = [("PRINT", Builtin (fun st -> let st = (run st) in
 						 | Word place -> let st = (run st) in
 								 {st with env = (place,st.value)::st.env ;
 									  value = NoValue}
-						 | _ -> raise (Failure "in SET place must be a word")))
+						 | _ -> raise (Failure "in SET place must be a word"))) ;
+		      ("REPEAT", Builtin (fun st -> (let st = (run st) in
+                                                     match st.value with
+                                                       | Num n -> (match st.next () with
+                                                           | Lst body -> let rec fn = (function
+							       | 0 -> (fun (x : state) -> x)
+							       | x -> (fun st -> fn (x - 1)
+								 (run_list body st))) in
+									 (fn n st)
+                                                           | _ -> raise (Failure "REPEAT body must be a word list"))
+                                                       | _ -> raise (Failure "REPEAT bound must be a number"))))
 
 		   ] ;
 	    env = [] ;
