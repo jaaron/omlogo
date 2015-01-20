@@ -100,7 +100,7 @@ let rec run state =
 					       fun _ -> match !ws with
 							| [] -> STOP
  							| x::xs -> ((ws := xs) ; x))}
- 
+
 let init = {dict = [("PRINT", Builtin (fun st -> let st = (run st) in
 						 st.value |> string_of_token |>
 						   print_string ; print_string "\n" ;st)) ;
@@ -129,8 +129,28 @@ let init = {dict = [("PRINT", Builtin (fun st -> let st = (run st) in
 												   | x -> read_body (x::acc)) in
 									      {st with dict = (w, WordList (ps, read_body []))::st.dict}
 							      | _ -> raise (Failure "Parameter list must be a list"))
-						 | _      -> raise (Failure "Proc name must be a word"))))
-
+						 | _      -> raise (Failure "Proc name must be a word")))) ;
+		      ("IF", Builtin (fun st -> let st = (run st) in
+						match st.value with
+						| Num 0 -> let rec do_else _ = (match (st.next ()) with
+										| Word "ELSE" -> (run st)
+										| _ -> do_else ()) in
+							   let st = do_else () in
+							   (match (st.next ()) with
+							    | Word "END" -> st
+							    | _          -> raise (Failure "Expected END after ELSE"))
+						| _     -> (match (st.next ()) with
+							    | Word "THEN" -> let st = (run st) in
+									     (match (st.next ()) with
+									      | Word "ELSE" -> let rec skip_to_end _ = (match (st.next ()) with
+															| Word "END" -> st
+															| _          -> skip_to_end ()) in
+											       skip_to_end ()
+									      | Word "END"  -> st
+									      | _           -> raise (Failure "Expected ELSE or END after THEN e"))
+							    | _ -> raise (Failure "Expected THEN after IF e"))))
+				     
+							   
 		   ] ;
 	    env = [] ;
 	    next = (parse stdin) ;
