@@ -72,6 +72,6 @@ the condition is zero, the words between ELSE and END are evaluated.
 	>   PRINT \"HELLO
 	> ELSE
 	>   PRINT \"GOODBYE
-	> END
+	> END" | ./logo
 	HELLO
 ```
