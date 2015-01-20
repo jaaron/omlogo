@@ -101,6 +101,15 @@ let rec run state =
 							| [] -> STOP
  							| x::xs -> ((ws := xs) ; x))}
 
+let read_until tok next = let rec helper acc = let n = (next ()) in
+					       if n = tok then List.rev acc
+					       else helper (n::acc) in
+			  helper []
+let drop_until tok next = let rec helper () = let n = (next ()) in
+					      if n = tok then ()
+					      else helper () in
+			  helper ()
+				 
 let init = {dict = [("PRINT", Builtin (fun st -> let st = (run st) in
 						 st.value |> string_of_token |>
 						   print_string ; print_string "\n" ;st)) ;
@@ -112,40 +121,31 @@ let init = {dict = [("PRINT", Builtin (fun st -> let st = (run st) in
 						 | _ -> raise (Failure "in SET place must be a word"))) ;
 		      ("REPEAT", Builtin (fun st -> (let st = (run st) in
                                                      match st.value with
-                                                     | Num n -> (match st.next () with
-								 | Lst body -> let rec fn = (function
-											      | 0 -> (fun (x : state) -> x)
-											      | x -> (fun st -> fn (x - 1)
-														   (run_list body st))) in
-									       (fn n st)
-								 | _ -> raise (Failure "REPEAT body must be a word list"))
+                                                     | Num n -> let body = read_until (Word "END") st.next in
+								let rec fn = (function
+									       | 0 -> (fun (x : state) -> x)
+									       | x -> (fun st -> fn (x - 1)
+												    (run_list body st))) in
+								(fn n st)								  
                                                      | _ -> raise (Failure "REPEAT bound must be a number")))) ;
 		      ("TO", Builtin (fun st -> (match (st.next ()) with
 						 | Word w -> (match (st.next ()) with
 							      | Lst p_toks -> let ps = List.map (function | Word w -> w
 												 | _ -> raise (Failure "Parameter name must be a word")) p_toks in
-									      let rec read_body acc = (match (st.next ()) with
-												   | Word "END" -> List.rev acc
-												   | x -> read_body (x::acc)) in
-									      {st with dict = (w, WordList (ps, read_body []))::st.dict}
+									      {st with dict = (w, WordList (ps, read_until (Word "END") st.next))::st.dict}
 							      | _ -> raise (Failure "Parameter list must be a list"))
 						 | _      -> raise (Failure "Proc name must be a word")))) ;
 		      ("IF", Builtin (fun st -> let st = (run st) in
 						match st.value with
-						| Num 0 -> let rec do_else _ = (match (st.next ()) with
-										| Word "ELSE" -> (run st)
-										| _ -> do_else ()) in
-							   let st = do_else () in
+						| Num 0 -> drop_until (Word "ELSE") st.next ; 
+							   let st = (run st) in
 							   (match (st.next ()) with
 							    | Word "END" -> st
 							    | _          -> raise (Failure "Expected END after ELSE"))
 						| _     -> (match (st.next ()) with
 							    | Word "THEN" -> let st = (run st) in
 									     (match (st.next ()) with
-									      | Word "ELSE" -> let rec skip_to_end _ = (match (st.next ()) with
-															| Word "END" -> st
-															| _          -> skip_to_end ()) in
-											       skip_to_end ()
+									      | Word "ELSE" -> drop_until (Word "END") st.next ; st
 									      | Word "END"  -> st
 									      | _           -> raise (Failure "Expected ELSE or END after THEN e"))
 							    | _ -> raise (Failure "Expected THEN after IF e"))))
