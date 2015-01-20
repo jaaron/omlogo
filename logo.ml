@@ -212,7 +212,9 @@ let graphics_dict = let turtle = ref {pos = {x = graphics_height/2; y = graphics
 		    [("FORWARD", Builtin (fun st -> let st = (run st) in
 						    match st.value with
 						    | Num n -> let dest = compute_end (!turtle).pos (!turtle.dir) n in
-							       if (!turtle).pen then lineto dest.x dest.y else () ;
+							       if (!turtle).pen
+							       then lineto dest.x dest.y
+							       else moveto dest.x dest.y ;
 							       turtle := {!turtle with pos = dest} ;
 							       {st with value = NoValue}
 						    | _     -> raise (Failure "FORWARD requires a numeric argument"))) ;
@@ -224,4 +226,5 @@ let graphics_dict = let turtle = ref {pos = {x = graphics_height/2; y = graphics
 		     ("PENDOWN", Builtin (fun st -> turtle := {!turtle with pen = true}; st))];;
 
 open_graph(" "^(string_of_int graphics_width)^"x"^(string_of_int graphics_height))  ;
+moveto (graphics_width/2) (graphics_height/2) ;
 runprog {init with dict = graphics_dict@init.dict}
