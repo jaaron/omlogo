@@ -68,7 +68,7 @@ condition and the ELSE (or END if ELSE is omitted) are evaluated. If
 the condition is zero, the words between ELSE and END are evaluated.
 ```
 	$ echo "SET \"X 5
-	> IF X THEN
+	> IF :X THEN
 	>   PRINT \"HELLO
 	> ELSE
 	>   PRINT \"GOODBYE
