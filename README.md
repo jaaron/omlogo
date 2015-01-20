@@ -5,13 +5,20 @@ Loosely based on the UCB logo users manual:
     http://www.cs.berkeley.edu/~bh/usermanual
 
 Current status is a working interpreter with very little builtin functionality. 
-Supports ", :, SET, and PRINT.
+Supports ", :, SET, and PRINT, TO, REPEAT, IF/THEN/ELSE/END, and basic
+graphics commands FORWARD, TURN, PENUP, PENDOWN
 
 NB: currently everything is fully case sensitive.
 
+ERRATA: Constructs requiring an END word don't nest. This is due to
+the stupid stream of tokens parsing we're using/the fact that we don't
+know how many words to consume for each instruction until evaluation
+time. We could give these constructs (TO, REPEAT, IF/THEN/ELSE)
+special syntax rules...pondering.
+
 To build:
 ```
-	$ ocamlc logo.ml -o logo
+	$ make
 ```
 
 To run:
