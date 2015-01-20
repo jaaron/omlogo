@@ -88,11 +88,13 @@ let rec run state =
    | STOP    -> {state with value = STOP}
    | Num n   -> {state with value = Num n}
    | QUOTE   -> {state with value = (state.next ())}
-   | Word w  -> (match List.assoc w state.dict with
+   | Word w  -> (match (try List.assoc w state.dict
+			with Not_found -> raise (Failure ("Procedure \""^w^"\" not found"))) with
 		 | WordList (args, words) -> run_list words (bindargs state args)
 		 | Builtin f              -> f state)					    
    | COLON   -> (match (state.next ()) with
-  		 | Word w -> {state with value = List.assoc w state.env}
+  		 | Word w -> {state with value = try List.assoc w state.env
+						 with Not_found -> raise (Failure ("Identifier \""^w^"\" not found")) }
   		 | _ -> raise (Failure ": must be followed by a symbol"))
    | Lst ws   -> run_list ws state
    | NoValue  -> {state with value = NoValue})
