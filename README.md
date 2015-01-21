@@ -40,8 +40,14 @@ specified using the " special form. For example:
 
 ## Defining Subroutines
 
-The TO builtin takes a word naming the subroutine, a list, and
-consumes words until it reaches the word END. For example:
+The TO builtin takes a word naming the subroutine, a quoted list of
+parameter names, and consumes words until it reaches the word END.
+
+Note: TO is a special form that does not evaluate its arguments, the
+procedure name and parameters must be syntactically a word and a
+quoted list of words.
+
+For example:
 ```
 	$ echo "TO SAY [X]
 	>   PRINT :X
@@ -53,13 +59,11 @@ consumes words until it reaches the word END. For example:
 	
 ## Iteration
 
-The REPEAT builtin takes an expression that evaluates to a numeric
-count, and evaluates subsequent words until the word END that many times.. 
+The REPEAT builtin takes a numeric count, and a list and evaluates the
+list count times. 
+
 ```
-	$ echo "REPEAT 5
-	>   PRINT \"HELLO
-	>   END
-	> STOP" | ./logo
+	$ echo "REPEAT 5 [PRINT \"HELLO] STOP" | ./logo
 	HELLO
 	HELLO
 	HELLO

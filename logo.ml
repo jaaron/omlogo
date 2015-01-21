@@ -7,10 +7,9 @@ let string_of_chars l =
 
 type token =
 | STOP
-| QUOTE
-| COLON
 | Word of string
 | Num of int
+| QLst of token list
 | Lst of token list
 | NoValue
 and state = {next : unit -> token ;
@@ -22,22 +21,26 @@ and fn =
 | WordList of (string list) * (token list)
 ;;
 
-let rec string_of_token = function
+let rec join_tokens l =
+  List.fold_left (fun str -> fun t ->
+			     str^(if String.length str = 0
+				  then "" else " ")^
+			       (string_of_token t)) "" l
+and string_of_token = function
   | STOP -> "STOP"
-  | QUOTE -> "\""
-  | COLON -> ":"
   | Word s -> s
   | Num i -> string_of_int i
   | NoValue -> "_"
-  | Lst ts -> List.fold_left (fun str -> fun t -> str^" "^(string_of_token t)) "[" ts
-
+  | Lst ts -> "(" ^ (join_tokens ts) ^")"
+  | QLst ts -> "[" ^ (join_tokens ts) ^"]"
+					 
 let parse = 
   let rec lookahead : char option ref = ref None in
   let isdigit c = (match c with
     | '0' | '1' | '2' | '3' | '4' | '5' |'6' |'7' |'8' | '9' -> true
     | _ -> false) in
   let isdelim c = (match c with
-    | '(' | ')' | '[' | ']' | '{' | '}' -> true
+    | '(' | ')' | '[' | ']' | '"' | ':' -> true
     | _ -> false) in
   let buf = Bytes.create 1 in
   let rec skip_whitespace chan = (really_input chan buf 0 1 ;
@@ -60,16 +63,16 @@ let parse =
     | ')' -> raise (Failure "Unexpected )")
     | '[' -> parse_list chan ']' []
     | ']' -> raise (Failure "Unexpected ]")
-    | '{' -> parse_list chan '}' []
-    | '}' -> raise (Failure "Unexpected }")
-    | ':' -> COLON
-    | '"' -> QUOTE
-    | c   -> let w = helper c [] in
-	     if isdigit c
-	     then Num (int_of_string w)
-	     else if w = "STOP" then STOP else Word w
+    | c   -> if isdelim c
+	     then Word (string_of_chars [c])
+	     else let w = helper c [] in
+		  if isdigit c
+		  then Num (int_of_string w)
+		  else if w = "STOP" then STOP else Word w
   and parse_list chan r l = let c = (input_char chan) in
-			    if c = r then Lst (List.rev l)
+			    if c = r then (if c = ']'
+					   then QLst (List.rev l)
+					   else Lst (List.rev l))
 			    else (lookahead := Some c ;
 				  parse_list chan r ((parse_token chan)::l)) in
   (fun chan -> fun _ -> parse_token chan);;
@@ -87,15 +90,11 @@ let rec run state =
    match tok with
    | STOP    -> {state with value = STOP}
    | Num n   -> {state with value = Num n}
-   | QUOTE   -> {state with value = (state.next ())}
+   | QLst l  -> {state with value = Lst l}
    | Word w  -> (match (try List.assoc w state.dict
      with Not_found -> raise (Failure ("Procedure \""^w^"\" not found"))) with
      | WordList (args, words) -> run_list words (bindargs state args)
      | Builtin f              -> f state)
-   | COLON   -> (match (state.next ()) with
-     | Word w -> {state with value = try List.assoc w state.env
-       with Not_found -> raise (Failure ("Identifier \""^w^"\" not found")) }
-     | _ -> raise (Failure ": must be followed by a symbol"))
    | Lst ws   -> run_list ws state
    | NoValue  -> {state with value = NoValue})
 and run_list l origstate = let ws = ref l in
@@ -117,47 +116,56 @@ let drop_until tok next = let rec helper () = let n = (next ()) in
 			  helper ()
 
 
-let init = {dict = [("PRINT", Builtin (fun st -> let st = (run st) in
-						 st.value |> string_of_token |>
-						     print_string ; print_string "\n" ;
-						 {st with value = NoValue})) ;
-		    ("SET", Builtin (fun st -> let st = (run st) in
-					       match st.value with
-					       | Word place -> let st = (run st) in
-							       {st with env = (place,st.value)::st.env ;
-								 value = NoValue}
-					       | _ -> raise (Failure "in SET place must be a word"))) ;
-		    ("REPEAT", Builtin (fun st -> (let st = (run st) in
-                                                   match st.value with
-                                                   | Num n -> let body = read_until (Word "END") st.next in
-							      List.iter (fun w -> print_string ("-> " ^(string_of_token w)^"\n")) body ;
-							      let rec fn = (function
-								| 0 -> (fun (x : state) -> x)
-								| x -> (fun st -> fn (x - 1)
-								  (run_list body st))) in
-							      (fn n st)
-                                                   | _ -> raise (Failure "REPEAT bound must be a number")))) ;
-		    ("TO", Builtin (fun st -> (match (st.next ()) with
-		    | Word w -> (match (st.next ()) with
-		      | Lst p_toks -> let ps = List.map (function | Word w -> w
-			| _ -> raise (Failure "Parameter name must be a word")) p_toks in
-				      {st with dict = (w, WordList (ps, read_until (Word "END") st.next))::st.dict}
-		      | _ -> raise (Failure "Parameter list must be a list"))
-		    | _      -> raise (Failure "Proc name must be a word")))) ;
-		    ("IF", Builtin (fun st -> let st = (run st) in
-					      match st.value with
-					      | Num 0 -> drop_until (Word "ELSE") st.next ; 
-						let st = (run st) in
-						(match (st.next ()) with
-						| Word "END" -> st
-						| _          -> raise (Failure "Expected END after ELSE"))
-					      | _     -> (match (st.next ()) with
-						| Word "THEN" -> let st = (run st) in
-								 (match (st.next ()) with
-								 | Word "ELSE" -> drop_until (Word "END") st.next ; st
-								 | Word "END"  -> st
-								 | _           -> raise (Failure "Expected ELSE or END after THEN e"))
-						| _ -> raise (Failure "Expected THEN after IF e"))))
+let init = {dict = [
+	       ("\"", Builtin (fun st -> {st with value = (st.next ())})) ;
+	       (":", Builtin (fun st -> match st.next () with
+					| Word w -> (try {st with value = (List.assoc w st.env)}
+						     with Not_found -> raise (Failure ("Identifier \""^w^"\" not found")))
+					| Num n  -> {st with value = Num n}
+					| _      -> raise (Failure ": must be followed by a word"))) ;
+	       ("PRINT", Builtin (fun st -> let st = (run st) in
+					    st.value |> string_of_token |>
+					      print_string ; print_string "\n" ;
+					    {st with value = NoValue})) ;
+	       ("SET", Builtin (fun st -> let st = (run st) in
+					  match st.value with
+					  | Word place -> let st = (run st) in
+							  {st with env = (place,st.value)::st.env ;
+								   value = NoValue}
+					  | _ -> raise (Failure "in SET place must be a word"))) ;
+	       ("REPEAT", Builtin (fun st -> (let st = (run st) in
+                                              match st.value with
+                                              | Num n -> let st = (run {st with value = NoValue}) in
+							 (match st.value with
+							  | Lst body ->
+							     let rec fn = (function
+									    | 0 -> (fun (x : state) -> x)
+									    | x -> (fun st -> fn (x - 1)
+												 (run_list body st))) in
+							     (fn n st)
+							  | _ -> raise (Failure "REPEAT body must be a list"))
+                                              | _ -> raise (Failure "REPEAT bound must be a number")))) ;
+	       ("TO", Builtin (fun st -> (match (st.next ()) with
+					  | Word w -> (match (st.next ()) with
+						       | QLst p_toks -> let ps = List.map (function | Word w -> w
+											   | _ -> raise (Failure "Parameter name must be a word")) p_toks in
+									{st with dict = (w, WordList (ps, read_until (Word "END") st.next))::st.dict}
+						       | _ -> raise (Failure "Parameter list must be a list"))
+					  | _      -> raise (Failure "Proc name must be a word")))) ;
+	       ("IF", Builtin (fun st -> let st = (run st) in
+					 match st.value with
+					 | Num 0 -> drop_until (Word "ELSE") st.next ; 
+						    let st = (run st) in
+						    (match (st.next ()) with
+						     | Word "END" -> st
+						     | _          -> raise (Failure "Expected END after ELSE"))
+					 | _     -> (match (st.next ()) with
+						     | Word "THEN" -> let st = (run st) in
+								      (match (st.next ()) with
+								       | Word "ELSE" -> drop_until (Word "END") st.next ; st
+								       | Word "END"  -> st
+								       | _           -> raise (Failure "Expected ELSE or END after THEN e"))
+						     | _ -> raise (Failure "Expected THEN after IF e"))))
 
 
 		   ] ;
@@ -172,7 +180,7 @@ let rec runprog s = match s.value with
   | v    -> runprog (run s)
 ;;
 
-
+  
 open Graphics
 
 type point = {x : int ; y : int}
