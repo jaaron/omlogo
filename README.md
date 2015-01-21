@@ -1,22 +1,25 @@
 # omlogo
+
 Playing around with implementing logo in ocaml.
 
-Loosely based on the UCB logo users manual:
+(Very) Loosely based on the UCB logo users manual:
     http://www.cs.berkeley.edu/~bh/usermanual
 
 Current status is a working interpreter with very little builtin functionality. 
-Supports ", :, SET, and PRINT, TO, REPEAT, IF/THEN/ELSE/END, and basic
+Supports ", :, SET, and PRINT, TO, REPEAT, IF, IFELSE, and basic
 graphics commands FORWARD, TURN, PENUP, PENDOWN
 
 NB: currently everything is fully case sensitive.
 
-ERRATA: Constructs requiring an END word don't nest. This is due to
-the stupid stream of tokens parsing we're using/the fact that we don't
-know how many words to consume for each instruction until evaluation
-time. We could give these constructs (TO, REPEAT, IF/THEN/ELSE)
-special syntax rules...pondering.
+Requires ocaml >= 4.0.2 with the Graphics module (not the default on
+OS X systems). My best experience has been to install a system ocaml
+compiler and opam, then use opam to install a new compiler:
+```
+	$ opam switch 4.0.2
+	$ eval `opam config env`
+```
 
-To build:
+To build omlogo:
 ```
 	$ make
 ```
@@ -73,16 +76,36 @@ list count times.
 
 ## Conditionals
 
-The IF/THEN/ELSE/END construct takes a condition expression that evaluates to 0 or
-non-zero. If the condition is non-zero, the words between the
-condition and the ELSE (or END if ELSE is omitted) are evaluated. If
-the condition is zero, the words between ELSE and END are evaluated.
+The IF builtin takes a condition expression that evaluates to TRUE or
+FALSE, and one list. If the condition is TRUE then the list is
+evaluated, otherwise nothing is done.
+
+The IFELSE builtin is similar but takes an additional list argument
+and evaluates it if the condition is FALSE.
+
 ```
 	$ echo "SET \"X 5
-	> IF :X THEN
-	>   PRINT \"HELLO
-	> ELSE
-	>   PRINT \"GOODBYE
-	> END" | ./logo
+	> IFELSE :X [PRINT \"HELLO]
+	>   [PRINT \"GOODBYE]
+	>STOP" | ./logo
 	HELLO
 ```
+
+## Arithmetic
+
+Basic arithmetic on integers is supported with SUM, DIFFERENCE,
+PRODUCT, QUOTIENT, and REMAINDER. Infix operators are not supported.
+
+## Graphics
+
+We don't currently draw the turtle in the display. The turtle is
+initially positioned in the center of the 600x600 pixel graph window
+oriented facing the right. See fractal.logo for a graphical
+example. To run use:
+
+```
+	$ cat fractal.logo /dev/stdin | ./logo
+	DRAWFRAC 200
+```
+
+Resizing the graphics window will likely cause strange things to happen.
